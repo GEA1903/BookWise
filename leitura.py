@@ -5,7 +5,7 @@ import time
 import os
 import sys
 import pyfiglet
-import re # NOVO: Importa o módulo de expressões regulares para validação de e-mail
+import re # Importa o módulo de expressões regulares para validação de e-mail
 
 # --- Constantes de Configuração ---
 ARQUIVO_DADOS_USUARIO = "dados_usuario.json"
@@ -38,49 +38,41 @@ def _pausar_e_limpar(prompt="Pressione Enter para continuar..."):
 def _imprimir_moldura(mensagem, tipo="info", largura=80):
     """
     Imprime uma mensagem dentro de uma moldura de texto para destaque com efeito cascata.
-    Tipos: "info", "sucesso", "aviso", "erro", "cabecalho", "titulo_quiz"
+    Tipos: "info", "sucesso", "aviso", "erro", "cabecalho"
     """
     bordas = {
         "sucesso": ("╔", "═", "╗", "║", "║", "╚", "╝", "✅ "),
         "erro":    ("╔", "═", "╗", "║", "║", "╚", "╝", "❌ "),
         "aviso":   ("╔", "═", "╗", "║", "║", "╚", "╝", "⚠️  "),
         "info":    ("╔", "═", "╗", "║", "║", "╚", "╝", "👉 "),
-        "cabecalho": ("╔", "═", "╗", "║", "║", "╚", "╝", " "),
-        "titulo_quiz": ("╔", "═", "╗", "║", "║", "╚", "╝", " ")
+        "cabecalho": ("╔", "═", "╗", "║", "║", "╚", "╝", " ")
+        # 'titulo_quiz' e suas bordas foram removidos daqui
     }
     
     borda_top_left, borda_horizontal, borda_top_right, borda_vertical_left, borda_vertical_right, borda_bottom_left, borda_bottom_right, prefixo = bordas.get(tipo, bordas["info"])
     
-    if tipo == "titulo_quiz":
-        titulo_quiz_linha1 = "QUIZ DA SEMANA"
-        titulo_quiz_linha2 = "Gasto Consciente de Água"
-        titulo_quiz_linha3 = "Teste seus conhecimentos e descubra como economizar água!"
+    # O bloco 'if tipo == "titulo_quiz":' foi removido completamente
+    # para eliminar qualquer referência ao quiz da água.
+    
+    # Lógica para outros tipos de molduras
+    if tipo == "cabecalho" and "BookWise" in mensagem:
+        linhas_formatadas = mensagem.split('\n')
+        max_line_len = max(len(line) for line in linhas_formatadas)
+        largura_ajustada = max(largura, max_line_len + len(prefixo) + 4)
+        
+        _cascata_texto(borda_top_left + borda_horizontal * (largura_ajustada - 2) + borda_top_right, delay=0.001)
+        for linha in linhas_formatadas:
+            conteudo = prefixo + linha.ljust(largura_ajustada - 2 - len(prefixo))
+            _cascata_texto(f"{borda_vertical_left} {conteudo}{borda_vertical_right}", delay=0.01)
+        _cascata_texto(borda_bottom_left + borda_horizontal * (largura_ajustada - 2) + borda_bottom_right, delay=0.001)
+    else:
+        linhas_formatadas = _quebrar_e_centralizar_texto(mensagem, largura - len(prefixo) - 4)
         
         _cascata_texto(borda_top_left + borda_horizontal * (largura - 2) + borda_top_right, delay=0.001)
-        _cascata_texto(f"{borda_vertical_left} {_centralizar_texto_apenas_string(titulo_quiz_linha1, largura - 2)}{borda_vertical_right}", delay=0.01)
-        _cascata_texto(f"{borda_vertical_left} {_centralizar_texto_apenas_string(titulo_quiz_linha2, largura - 2)}{borda_vertical_right}", delay=0.01)
-        _cascata_texto(borda_vertical_left + borda_horizontal * (largura - 2) + borda_vertical_right, delay=0.001)
-        _cascata_texto(f"{borda_vertical_left} {_centralizar_texto_apenas_string(titulo_quiz_linha3, largura - 2)}{borda_vertical_right}", delay=0.01)
+        for linha in linhas_formatadas:
+            conteudo = prefixo + linha.ljust(largura - 2 - len(prefixo))
+            _cascata_texto(f"{borda_vertical_left} {conteudo}{borda_vertical_right}", delay=0.01)
         _cascata_texto(borda_bottom_left + borda_horizontal * (largura - 2) + borda_bottom_right, delay=0.001)
-    else:
-        if tipo == "cabecalho" and "BookWise" in mensagem:
-            linhas_formatadas = mensagem.split('\n')
-            max_line_len = max(len(line) for line in linhas_formatadas)
-            largura_ajustada = max(largura, max_line_len + len(prefixo) + 4)
-            
-            _cascata_texto(borda_top_left + borda_horizontal * (largura_ajustada - 2) + borda_top_right, delay=0.001)
-            for linha in linhas_formatadas:
-                conteudo = prefixo + linha.ljust(largura_ajustada - 2 - len(prefixo))
-                _cascata_texto(f"{borda_vertical_left} {conteudo}{borda_vertical_right}", delay=0.01)
-            _cascata_texto(borda_bottom_left + borda_horizontal * (largura_ajustada - 2) + borda_bottom_right, delay=0.001)
-        else:
-            linhas_formatadas = _quebrar_e_centralizar_texto(mensagem, largura - len(prefixo) - 4)
-            
-            _cascata_texto(borda_top_left + borda_horizontal * (largura - 2) + borda_top_right, delay=0.001)
-            for linha in linhas_formatadas:
-                conteudo = prefixo + linha.ljust(largura - 2 - len(prefixo))
-                _cascata_texto(f"{borda_vertical_left} {conteudo}{borda_vertical_right}", delay=0.01)
-            _cascata_texto(borda_bottom_left + borda_horizontal * (largura - 2) + borda_bottom_right, delay=0.001)
 
 
 def _centralizar_texto_apenas_string(texto, largura):
@@ -143,9 +135,7 @@ def _obter_entrada_float(prompt):
             _imprimir_moldura("Entrada inválida. Por favor, digite um número decimal (ex: 3.5).", tipo="erro")
 
 def _obter_entrada_email(prompt):
-    """NOVA FUNÇÃO: Obtém um endereço de email do usuário e valida o formato básico."""
-    # Expressão regular para validar o formato básico de um email
-    # Aceita letras, números, ._%+- antes do @, e letras, números, .- depois do @ e . no final
+    """Obtém um endereço de email do usuário e valida o formato básico."""
     email_regex = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
     
     _cascata_texto(prompt, delay=0.01)
@@ -286,7 +276,7 @@ def coletar_dados_do_usuario(gerenciador_dados):
     _imprimir_moldura("Para sua segurança, crie suas credenciais de acesso.", tipo="info")
 
     dados_perfil = {}
-    dados_perfil['email'] = _obter_entrada_email('Crie seu e-mail de login: ') # ALTERADO: Usando _obter_entrada_email
+    dados_perfil['email'] = _obter_entrada_email('Crie seu e-mail de login: ') # AGORA USA A VALIDAÇÃO DE EMAIL
     # Em um sistema real, aqui você hash a senha antes de armazenar
     dados_perfil['senha'] = _obter_entrada_string('Crie sua senha: ') 
     
@@ -327,7 +317,7 @@ def realizar_login(gerenciador_dados):
         
     tentativas = 3
     while tentativas > 0:
-        email_digitado = _obter_entrada_email(f'E-mail de login ({tentativas} tentativas restantes): ') # ALTERADO: Usando _obter_entrada_email
+        email_digitado = _obter_entrada_email(f'E-mail de login ({tentativas} tentativas restantes): ') # AGORA USA A VALIDAÇÃO DE EMAIL
         senha_digitada = _obter_entrada_string(f'Senha de login ({tentativas} tentativas restantes): ')
         
         if email_digitado == perfil['email'] and senha_digitada == perfil['senha']:
@@ -876,12 +866,11 @@ def exibir_menu_principal(gerenciador_dados):
         menu_opcoes = [
             "1. Ver Estimativa de Livros Futuros",
             "2. Ver Estimativa de Horas de Leitura Futuras",
-            # "3. Exibir Meu Perfil de Leitura", # REMOVIDO
-            "3. Gerenciar Meu Histórico de Leitura", # Opção 4 se torna 3
-            "4. Gerenciar Minhas Metas de Leitura",  # Opção 5 se torna 4
-            "5. Analisar Meus Hábitos de Leitura",    # Opção 6 se torna 5
-            "6. Teste de Velocidade de Leitura (WPM)",# Opção 7 se torna 6
-            "7. Sair" # Sair agora é opção 7
+            "3. Gerenciar Meu Histórico de Leitura",
+            "4. Gerenciar Minhas Metas de Leitura",  
+            "5. Analisar Meus Hábitos de Leitura",    
+            "6. Teste de Velocidade de Leitura (WPM)",
+            "7. Sair"
         ]
         
         for opcao in menu_opcoes:
@@ -898,15 +887,15 @@ def exibir_menu_principal(gerenciador_dados):
             estimativa_livros_futuros(dados_perfil)
         elif escolha == '2':
             estimativa_horas_futuras(dados_perfil)
-        elif escolha == '3': # CHAMA AGORA HISTÓRICO
+        elif escolha == '3':
             gerenciar_historico_leitura(gerenciador_dados)
-        elif escolha == '4': # CHAMA AGORA METAS
+        elif escolha == '4':
             gerenciar_metas_leitura(gerenciador_dados)
-        elif escolha == '5': # CHAMA AGORA ANÁLISE DE HÁBITOS
+        elif escolha == '5':
             analisar_habitos_leitura(dados_perfil, historico_leitura)
-        elif escolha == '6': # CHAMA AGORA TESTE DE VELOCIDADE
+        elif escolha == '6':
             teste_velocidade_leitura()
-        elif escolha == '7': # Sair agora é opção 7
+        elif escolha == '7':
             sair_do_programa()
         else:
             _imprimir_moldura("Opção inválida. Por favor, digite um número de 1 a 7.", tipo="erro")
@@ -938,4 +927,3 @@ if __name__ == "__main__":
     
     # Se chegou aqui, o usuário está logado ou criou o perfil
     exibir_menu_principal(gerenciador_dados_usuario)
-    
