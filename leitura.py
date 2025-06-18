@@ -5,6 +5,7 @@ import time
 import os
 import sys
 import pyfiglet
+import re # NOVO: Importa o módulo de expressões regulares para validação de e-mail
 
 # --- Constantes de Configuração ---
 ARQUIVO_DADOS_USUARIO = "dados_usuario.json"
@@ -141,6 +142,22 @@ def _obter_entrada_float(prompt):
         except ValueError:
             _imprimir_moldura("Entrada inválida. Por favor, digite um número decimal (ex: 3.5).", tipo="erro")
 
+def _obter_entrada_email(prompt):
+    """NOVA FUNÇÃO: Obtém um endereço de email do usuário e valida o formato básico."""
+    # Expressão regular para validar o formato básico de um email
+    # Aceita letras, números, ._%+- antes do @, e letras, números, .- depois do @ e . no final
+    email_regex = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
+    
+    _cascata_texto(prompt, delay=0.01)
+    while True:
+        email = input().strip().lower() # Converte para minúsculas para consistência
+        if not email:
+            _imprimir_moldura("O e-mail não pode ser vazio. Por favor, digite novamente.", tipo="aviso")
+        elif not email_regex.match(email):
+            _imprimir_moldura("Formato de e-mail inválido. Por favor, digite um e-mail válido (ex: seu.email@exemplo.com).", tipo="aviso")
+        else:
+            return email
+
 # --- Classe GerenciadorDeDadosUsuario para persistência ---
 class GerenciadorDeDadosUsuario:
     """
@@ -168,9 +185,12 @@ class GerenciadorDeDadosUsuario:
         return self._estrutura_dados_inicial()
 
     def _estrutura_dados_inicial(self):
-        """Retorna a estrutura inicial vazia para os dados do usuário."""
+        """Retorna a estrutura inicial vazia para os dados do usuário, incluindo login."""
         return {
-            "perfil": {},
+            "perfil": {
+                "email": "", # Novo campo para email
+                "senha": ""  # Novo campo para senha (em um cenário real, use hash)
+            },
             "historico_leitura": [],
             "metas_leitura": {}
         }
@@ -215,6 +235,27 @@ class GerenciadorDeDadosUsuario:
                 return True
         _imprimir_moldura(f"Livro com ID {livro_id} não encontrado no histórico.", tipo="erro")
         return False
+    
+    def remover_livro_do_historico(self, livro_id):
+        """Remove um livro do histórico de leitura pelo ID."""
+        livro_encontrado = False
+        # Para verificar se o livro foi encontrado ANTES de removê-lo
+        for livro in self.dados["historico_leitura"]:
+            if livro['id'] == livro_id:
+                livro_encontrado = True
+                break
+
+        if livro_encontrado:
+            # Cria uma nova lista apenas com os livros que NÃO serão removidos
+            self.dados["historico_leitura"] = [
+                livro for livro in self.dados["historico_leitura"] if livro['id'] != livro_id
+            ]
+            _imprimir_moldura(f"Livro com ID {livro_id} removido do histórico.", tipo="sucesso")
+            self.salvar_dados()
+            return True
+        else:
+            _imprimir_moldura(f"Livro com ID {livro_id} não encontrado no histórico.", tipo="erro")
+            return False
 
     def obter_metas_leitura(self):
         return self.dados["metas_leitura"]
@@ -231,15 +272,24 @@ class GerenciadorDeDadosUsuario:
 def coletar_dados_do_usuario(gerenciador_dados):
     """
     Coleta todas as informações do usuário se o perfil não existir,
-    e salva no gerenciador de dados.
+    e salva no gerenciador de dados, incluindo email e senha para login.
     """
-    if gerenciador_dados.obter_perfil():
-        _imprimir_moldura("Seu perfil já existe. Carregando dados...", tipo="info")
-        return gerenciador_dados.obter_perfil()
+    perfil_existente = gerenciador_dados.obter_perfil()
+    if perfil_existente and perfil_existente.get('email') and perfil_existente.get('senha'):
+        # Se já tem email e senha, significa que o perfil já foi criado.
+        # Não coletar novamente aqui, a menos que seja um fluxo de "editar perfil".
+        # O login será tratado separadamente.
+        _imprimir_moldura("Seu perfil já existe. Prossiga para o login.", tipo="info")
+        return perfil_existente
         
-    _imprimir_moldura("PREENCHA SUAS INFORMAÇÕES", tipo="cabecalho", largura=40)
-    
+    _imprimir_moldura("CRIAÇÃO DE PERFIL - PREENCHA SUAS INFORMAÇÕES", tipo="cabecalho", largura=60)
+    _imprimir_moldura("Para sua segurança, crie suas credenciais de acesso.", tipo="info")
+
     dados_perfil = {}
+    dados_perfil['email'] = _obter_entrada_email('Crie seu e-mail de login: ') # ALTERADO: Usando _obter_entrada_email
+    # Em um sistema real, aqui você hash a senha antes de armazenar
+    dados_perfil['senha'] = _obter_entrada_string('Crie sua senha: ') 
+    
     dados_perfil['nome'] = _obter_entrada_string('Insira seu nome completo: ')
     dados_perfil['idade'] = _obter_entrada_inteiro('Insira sua idade: ')
     dados_perfil['cidade_estado'] = _obter_entrada_string('Cidade, Estado (Ex: São Paulo,SP): ')
@@ -259,9 +309,40 @@ def coletar_dados_do_usuario(gerenciador_dados):
     dados_perfil['genero_favorito'] = _obter_entrada_string('Insira o gênero ou subgênero que você mais gosta (Ex: Terror, Comédia): ')
     
     gerenciador_dados.definir_perfil(dados_perfil)
-    _imprimir_moldura("DADOS COLETADOS COM SUCESSO!", tipo="sucesso", largura=40)
+    _imprimir_moldura("PERFIL CRIADO COM SUCESSO!", tipo="sucesso", largura=40)
     return dados_perfil
 
+def realizar_login(gerenciador_dados):
+    """
+    Tenta realizar o login do usuário com email e senha.
+    Retorna True se o login for bem-sucedido, False caso contrário.
+    """
+    _imprimir_moldura("LOGIN NO BOOKWISE", tipo="cabecalho", largura=40)
+    perfil = gerenciador_dados.obter_perfil()
+    
+    if not perfil or not perfil.get('email') or not perfil.get('senha'):
+        _imprimir_moldura("Nenhum perfil registrado. Por favor, crie seu perfil primeiro.", tipo="aviso")
+        _pausar_e_limpar()
+        return False
+        
+    tentativas = 3
+    while tentativas > 0:
+        email_digitado = _obter_entrada_email(f'E-mail de login ({tentativas} tentativas restantes): ') # ALTERADO: Usando _obter_entrada_email
+        senha_digitada = _obter_entrada_string(f'Senha de login ({tentativas} tentativas restantes): ')
+        
+        if email_digitado == perfil['email'] and senha_digitada == perfil['senha']:
+            _imprimir_moldura(f"Bem-vindo(a) de volta, {perfil['nome'].split(' ')[0]}!", tipo="sucesso")
+            _pausar_e_limpar()
+            return True
+        else:
+            _imprimir_moldura("E-mail ou senha incorretos. Tente novamente.", tipo="erro")
+            tentativas -= 1
+            _pausar_e_limpar("Pressione Enter para tentar novamente...")
+            _limpar_tela()
+            _imprimir_moldura("LOGIN NO BOOKWISE", tipo="cabecalho", largura=40) # Reimprime o cabeçalho
+            
+    _imprimir_moldura("Número máximo de tentativas de login excedido. Encerrando programa.", tipo="erro")
+    return False
 
 
 def estimativa_livros_futuros(dados_perfil):
@@ -423,9 +504,9 @@ def analisar_habitos_leitura(dados_perfil, historico_leitura):
             livros_por_hora_anual = total_livros_ano_perfil / horas_anuais_totais
             _cascata_texto(f"  - Em média, você lê {livros_por_hora_anual:.2f} livros por hora de leitura (anual).", delay=0.005)
             if livros_por_hora_anual > 0.1:
-                 _imprimir_moldura("Sua eficiência parece boa! Você aproveita bem seu tempo de leitura. 🚀", tipo="sucesso")
+                    _imprimir_moldura("Sua eficiência parece boa! Você aproveita bem seu tempo de leitura. 🚀", tipo="sucesso")
             else:
-                 _imprimir_moldura("Pode haver espaço para otimizar sua leitura. Tente focar e evitar distrações. 🤔", tipo="info")
+                    _imprimir_moldura("Pode haver espaço para otimizar sua leitura. Tente focar e evitar distrações. 🤔", tipo="info")
         else:
             _imprimir_moldura("As horas de leitura anuais são muito baixas para calcular a eficiência.", tipo="aviso")
     else:
@@ -524,7 +605,7 @@ def teste_velocidade_leitura():
 # --- Funções para Histórico de Leitura ---
 def gerenciar_historico_leitura(gerenciador_dados):
     """
-    Menu para adicionar, atualizar e visualizar livros no histórico de leitura.
+    Menu para adicionar, atualizar, visualizar e remover livros no histórico de leitura.
     """
     while True:
         _limpar_tela()
@@ -534,7 +615,8 @@ def gerenciar_historico_leitura(gerenciador_dados):
             "2. Atualizar Progresso de Livro",
             "3. Ver Livros Em Andamento",
             "4. Ver Livros Concluídos",
-            "5. Voltar ao Menu Principal"
+            "5. Remover Livro do Histórico", # NOVA OPÇÃO
+            "6. Voltar ao Menu Principal" # Opção numerada para 6
         ]
         for opcao in menu_historico:
             _cascata_texto(f"  {opcao}", delay=0.005)
@@ -550,10 +632,12 @@ def gerenciar_historico_leitura(gerenciador_dados):
             _ver_historico(gerenciador_dados, status="Em Andamento")
         elif escolha == '4':
             _ver_historico(gerenciador_dados, status="Concluído")
-        elif escolha == '5':
+        elif escolha == '5': # Chama a nova função de remoção
+            _remover_livro_do_historico_interativo(gerenciador_dados)
+        elif escolha == '6': # Opção de saída ajustada
             break
         else:
-            _imprimir_moldura("Opção inválida. Por favor, digite um número de 1 a 5.", tipo="erro")
+            _imprimir_moldura("Opção inválida. Por favor, digite um número de 1 a 6.", tipo="erro")
             _pausar_e_limpar()
 
 def _adicionar_livro_ao_historico(gerenciador_dados):
@@ -634,6 +718,25 @@ def _atualizar_progresso_livro(gerenciador_dados):
 
     gerenciador_dados.atualizar_livro_no_historico(livro_id_para_atualizar, novas_paginas, status_novo)
     _pausar_e_limpar()
+
+def _remover_livro_do_historico_interativo(gerenciador_dados):
+    """Permite ao usuário selecionar e remover um livro do histórico."""
+    _imprimir_moldura("REMOVER LIVRO DO HISTÓRICO", tipo="cabecalho", largura=50)
+    historico = gerenciador_dados.obter_historico_leitura()
+    
+    if not historico:
+        _imprimir_moldura("Nenhum livro no histórico para remover.", tipo="aviso")
+        _pausar_e_limpar()
+        return
+
+    _imprimir_moldura("Livros no seu histórico:", tipo="info")
+    for livro in historico:
+        print(f"  [{livro['id']}] {livro['titulo']} por {livro['autor']} (Status: {livro['status']})")
+    
+    livro_id_para_remover = _obter_entrada_inteiro("Digite o ID do livro que deseja remover: ")
+    gerenciador_dados.remover_livro_do_historico(livro_id_para_remover)
+    _pausar_e_limpar()
+
 
 def _ver_historico(gerenciador_dados, status=None):
     """Exibe os livros do histórico de leitura com base no status."""
@@ -776,7 +879,7 @@ def exibir_menu_principal(gerenciador_dados):
             # "3. Exibir Meu Perfil de Leitura", # REMOVIDO
             "3. Gerenciar Meu Histórico de Leitura", # Opção 4 se torna 3
             "4. Gerenciar Minhas Metas de Leitura",  # Opção 5 se torna 4
-            "5. Analisar Meus Hábitos de Leitura",   # Opção 6 se torna 5
+            "5. Analisar Meus Hábitos de Leitura",    # Opção 6 se torna 5
             "6. Teste de Velocidade de Leitura (WPM)",# Opção 7 se torna 6
             "7. Sair" # Sair agora é opção 7
         ]
@@ -818,11 +921,21 @@ if __name__ == "__main__":
     _pausar_e_limpar()
 
     gerenciador_dados_usuario = GerenciadorDeDadosUsuario(ARQUIVO_DADOS_USUARIO)
-
-    dados_iniciais_perfil = coletar_dados_do_usuario(gerenciador_dados_usuario)
-
-    if not dados_iniciais_perfil:
-        _imprimir_moldura("Erro ao carregar ou coletar dados do perfil. Encerrando.", tipo="erro")
-        exit()
-
+    
+    # Verifica se já existe um perfil com email e senha
+    perfil_existente = gerenciador_dados_usuario.obter_perfil()
+    
+    if perfil_existente and perfil_existente.get('email') and perfil_existente.get('senha'):
+        # Se existe, tenta fazer o login
+        if not realizar_login(gerenciador_dados_usuario):
+            sair_do_programa() # Sai se o login falhar após tentativas
+    else:
+        # Se não existe perfil ou está incompleto, coleta os dados iniciais
+        dados_iniciais_perfil = coletar_dados_do_usuario(gerenciador_dados_usuario)
+        if not dados_iniciais_perfil:
+            _imprimir_moldura("Erro ao criar o perfil. Encerrando.", tipo="erro")
+            exit()
+    
+    # Se chegou aqui, o usuário está logado ou criou o perfil
     exibir_menu_principal(gerenciador_dados_usuario)
+    
